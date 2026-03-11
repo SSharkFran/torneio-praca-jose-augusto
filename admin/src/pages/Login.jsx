@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User } from 'lucide-react';
+import api from '../api';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -14,22 +15,15 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      // Usa o axios padrão aqui para não precisar de token
-      const response = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await response.json();
-      
-      if (response.ok) {
-        localStorage.setItem('admin_token', data.token);
-        navigate('/');
-      } else {
-        setError(data.message || 'Erro ao fazer login');
-      }
+      const response = await api.post('/auth/login', { username, password });
+      localStorage.setItem('admin_token', response.data.token);
+      navigate('/');
     } catch (err) {
-      setError('Problemas de conexão com o servidor');
+      if (err.response && err.response.data && err.response.data.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Problemas de conexão com o servidor');
+      }
     } finally {
       setLoading(false);
     }

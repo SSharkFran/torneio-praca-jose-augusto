@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 import { Calendar, Clock, Trophy, MapPin, Activity } from 'lucide-react';
-
-const API_URL = 'http://localhost:5000/api';
 
 const STATUS_COLORS = {
   agendado: 'bg-gray-700 text-gray-300 border-gray-600',
@@ -24,7 +22,7 @@ export default function PublicFeed() {
 
   const fetchJogos = async () => {
     try {
-      const resp = await axios.get(`${API_URL}/public/jogos`);
+      const resp = await api.get('/public/jogos');
       setJogos(resp.data);
     } catch (e) {
       console.error("Erro ao obters jogos", e);
