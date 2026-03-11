@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, redirect
 from flask_cors import CORS
 from .models import db
 
@@ -36,5 +36,13 @@ def create_app(test_config=None):
     @app.route('/health')
     def health_check():
         return {'status': 'ok'}
+
+    @app.route('/')
+    def root():
+        return redirect('https://gleaming-spontaneity-projetos.up.railway.app/app')
+
+    @app.route('/api')
+    def api_info():
+        return {'service': 'Torneio Praça José Augusto API', 'version': '1.0', 'status': 'online'}
 
     return app

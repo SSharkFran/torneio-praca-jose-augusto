@@ -3,6 +3,27 @@ from ..models import Torneio, Jogo
 
 bp = Blueprint('public', __name__, url_prefix='/api/public')
 
+@bp.route('/jogos', methods=['GET'])
+def get_all_jogos():
+    """Retorna todos os jogos de todos os torneios (para o feed público)"""
+    jogos = Jogo.query.order_by(Jogo.data_hora.desc()).all()
+    resultados = []
+    for j in jogos:
+        resultados.append({
+            "id": j.id,
+            "fase": j.fase,
+            "time_a_nome": j.time_a.nome if j.time_a else "A definir",
+            "time_a_sigla": j.time_a.sigla if j.time_a else "TBD",
+            "time_b_nome": j.time_b.nome if j.time_b else "A definir",
+            "time_b_sigla": j.time_b.sigla if j.time_b else "TBD",
+            "placar_a": j.placar_a,
+            "placar_b": j.placar_b,
+            "status": j.status,
+            "data_hora": j.data_hora.isoformat() if j.data_hora else None,
+            "vencedor_id": j.vencedor_id
+        })
+    return jsonify(resultados)
+
 @bp.route('/torneio/<int:torneio_id>', methods=['GET'])
 def get_torneio_public(torneio_id):
     torneio = Torneio.query.get_or_404(torneio_id)
