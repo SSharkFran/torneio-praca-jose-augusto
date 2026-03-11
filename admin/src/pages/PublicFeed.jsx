@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
 import { Calendar, Clock, Trophy, MapPin, Activity, Search, X, Filter, GitBranch, Heart, AlertTriangle } from 'lucide-react';
+import Confetti from 'react-confetti';
 
 const STATUS_COLORS = {
   agendado: 'bg-gray-700 text-gray-300 border-gray-600',
@@ -28,43 +29,36 @@ const TIPO_ICONS = {
 // GOAL CELEBRATION (Public)
 // ================================
 function GoalCelebrationPublic({ teamName, onFinish }) {
+  const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+
   useEffect(() => {
-    const timer = setTimeout(onFinish, 3500);
+    const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(onFinish, 6000);
     return () => clearTimeout(timer);
   }, [onFinish]);
-
-  const confettiColors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316'];
-  const confettiPieces = Array.from({ length: 50 }, (_, i) => ({
-    id: i,
-    left: `${Math.random() * 100}%`,
-    color: confettiColors[i % confettiColors.length],
-    delay: `${Math.random() * 0.8}s`,
-    size: `${6 + Math.random() * 10}px`,
-  }));
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-      {confettiPieces.map(p => (
-        <div
-          key={p.id}
-          className="confetti-piece"
-          style={{
-            left: p.left,
-            top: '-20px',
-            backgroundColor: p.color,
-            animationDelay: p.delay,
-            width: p.size,
-            height: p.size,
-          }}
-        />
-      ))}
-      <div className="relative z-10 flex flex-col items-center gap-4">
-        <div className="text-8xl animate-goal-ball">⚽</div>
-        <h1 className="text-6xl md:text-8xl font-black uppercase tracking-wider animate-goal-text bg-gradient-to-r from-yellow-300 via-yellow-500 to-orange-500 bg-clip-text text-transparent">
+      <Confetti
+        width={windowSize.width}
+        height={windowSize.height}
+        recycle={true}
+        numberOfPieces={400}
+        gravity={0.15}
+        colors={['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316', '#FFFFFF']}
+      />
+      <div className="relative z-10 flex flex-col items-center gap-4 animate-fade-in">
+        <div className="text-8xl animate-bounce">⚽</div>
+        <h1 className="text-6xl md:text-8xl font-black uppercase tracking-wider bg-gradient-to-r from-yellow-300 via-yellow-500 to-orange-500 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]">
           GOOOOL!
         </h1>
-        <p className="text-2xl md:text-3xl font-bold text-white animate-goal-text" style={{ animationDelay: '0.5s' }}>
+        <p className="text-3xl md:text-5xl font-black text-white px-6 py-2 mt-2 bg-black/40 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl uppercase tracking-widest text-center">
           {teamName}
         </p>
       </div>
