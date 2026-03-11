@@ -105,6 +105,30 @@ def delete_time(time_id):
     return jsonify({"message": "Time excluído com sucesso!"})
 
 # --- JOGOS / PLACAR ---
+@bp.route('/jogos', methods=['GET'])
+@token_required
+def get_all_jogos():
+    """Retorna todos os jogos de todos os torneios"""
+    jogos = Jogo.query.order_by(Jogo.data_hora.desc()).all()
+    resultados = []
+    for j in jogos:
+        resultados.append({
+            "id": j.id,
+            "fase": j.fase,
+            "time_a": j.time_a.nome if j.time_a else None,
+            "time_b": j.time_b.nome if j.time_b else None,
+            "time_a_nome": j.time_a.nome if j.time_a else "A definir",
+            "time_b_nome": j.time_b.nome if j.time_b else "A definir",
+            "time_a_id": j.time_a_id,
+            "time_b_id": j.time_b_id,
+            "placar_a": j.placar_a,
+            "placar_b": j.placar_b,
+            "status": j.status,
+            "data_hora": j.data_hora.isoformat() if j.data_hora else None,
+            "vencedor_id": j.vencedor_id
+        })
+    return jsonify(resultados)
+
 @bp.route('/jogos/<int:torneio_id>', methods=['GET'])
 @token_required
 def get_jogos(torneio_id):
@@ -116,6 +140,8 @@ def get_jogos(torneio_id):
             "fase": j.fase,
             "time_a": j.time_a.nome if j.time_a else None,
             "time_b": j.time_b.nome if j.time_b else None,
+            "time_a_nome": j.time_a.nome if j.time_a else "A definir",
+            "time_b_nome": j.time_b.nome if j.time_b else "A definir",
             "time_a_id": j.time_a_id,
             "time_b_id": j.time_b_id,
             "placar_a": j.placar_a,
