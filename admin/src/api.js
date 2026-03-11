@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Base API para Admin Panel
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: 'torneiopraca.up.railway.app/api',
 });
 
 api.interceptors.request.use(
