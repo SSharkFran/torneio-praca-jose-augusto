@@ -23,8 +23,15 @@ def create_app(test_config=None):
     CORS(app)
 
     with app.app_context():
-        # db.create_all() # Movido para script de init do banco
-        pass
+        db.create_all()
+        # Auto-migrate: add rodada column if missing
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('jogos')]
+        if 'rodada' not in columns:
+            with db.engine.connect() as conn:
+                conn.execute(text('ALTER TABLE jogos ADD COLUMN rodada INTEGER DEFAULT 1'))
+                conn.commit()
         
     # Registrar Blueprints
     from .routes import admin_routes, public_routes, payment_routes, auth_routes

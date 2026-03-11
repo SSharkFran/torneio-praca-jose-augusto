@@ -1,3 +1,102 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* === Goal Animation === */
+@keyframes goal-text-pulse {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.15); opacity: 1; }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes goal-fade-out {
+  0% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes confetti-fall {
+  0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+@keyframes confetti-fall-slow {
+  0% { transform: translateY(-100vh) rotate(0deg) scale(1.2); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(540deg) scale(0.5); opacity: 0; }
+}
+
+@keyframes goal-ball-bounce {
+  0% { transform: translateY(-40px) scale(1.6); opacity: 0; }
+  30% { transform: translateY(10px) scale(0.9); opacity: 1; }
+  50% { transform: translateY(-15px) scale(1.1); }
+  70% { transform: translateY(5px) scale(0.95); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.animate-goal-text {
+  animation: goal-text-pulse 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-goal-overlay {
+  animation: goal-fade-out 3s ease-in-out forwards;
+}
+
+.animate-goal-ball {
+  animation: goal-ball-bounce 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-shimmer {
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+}
+
+/* Confetti particles */
+.confetti-piece {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  animation: confetti-fall 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.confetti-piece:nth-child(even) {
+  animation-name: confetti-fall-slow;
+  border-radius: 50%;
+}
+
+/* === Fade In Animation === */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+/* === Bracket Visualization === */
+@keyframes bracket-line-draw {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+
+.bracket-connector {
+  stroke-dasharray: 100;
+  animation: bracket-line-draw 0.5s ease-out forwards;
+}
+
+/* === Filter Bar === */
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s ease-out forwards;
+}

@@ -34,6 +34,7 @@ class Jogo(db.Model):
     status = db.Column(db.String(20), default='agendado') # agendado, andamento, intervalo, finalizado
     data_hora = db.Column(db.DateTime, nullable=False)
     vencedor_id = db.Column(db.Integer, db.ForeignKey('times.id'), nullable=True)
+    rodada = db.Column(db.Integer, default=1)  # Round number for bracket tracking
 
     time_a = db.relationship('Time', foreign_keys=[time_a_id])
     time_b = db.relationship('Time', foreign_keys=[time_b_id])
