@@ -1,80 +1,31 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../api';
-import { Play, Pause, Square, Plus, Zap, ChevronRight, Trophy } from 'lucide-react';
+import { Trophy, Plus, Minus, Play, Pause, Square, Zap, AlertTriangle, FileText, X, ChevronDown, ChevronUp } from 'lucide-react';
 
-const STATUS_COLORS = {
-  agendado: 'bg-gray-100 text-gray-800',
-  andamento: 'bg-green-100 text-green-800',
-  intervalo: 'bg-yellow-100 text-yellow-800',
-  finalizado: 'bg-blue-100 text-blue-800',
+const TIPO_ICONS = {
+  cartao_amarelo: '🟨',
+  cartao_vermelho: '🟥',
+  falta: '⚠️',
+  substituicao: '🔄',
+  observacao: '📝'
 };
 
-// ==========================
-// GOAL CELEBRATION COMPONENT
-// ==========================
-function GoalCelebration({ teamName, onFinish }) {
-  useEffect(() => {
-    const timer = setTimeout(onFinish, 3000);
-    return () => clearTimeout(timer);
-  }, [onFinish]);
+const TIPO_LABELS = {
+  cartao_amarelo: 'Cartão Amarelo',
+  cartao_vermelho: 'Cartão Vermelho',
+  falta: 'Falta',
+  substituicao: 'Substituição',
+  observacao: 'Observação'
+};
 
-  const confettiColors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316'];
-  const confettiPieces = Array.from({ length: 60 }, (_, i) => ({
-    id: i,
-    left: `${Math.random() * 100}%`,
-    color: confettiColors[i % confettiColors.length],
-    delay: `${Math.random() * 0.8}s`,
-    size: `${6 + Math.random() * 10}px`,
-  }));
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center animate-goal-overlay pointer-events-none">
-      {/* Dark overlay */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-
-      {/* Confetti */}
-      {confettiPieces.map(p => (
-        <div
-          key={p.id}
-          className="confetti-piece"
-          style={{
-            left: p.left,
-            top: '-20px',
-            backgroundColor: p.color,
-            animationDelay: p.delay,
-            width: p.size,
-            height: p.size,
-          }}
-        />
-      ))}
-
-      {/* Goal Text */}
-      <div className="relative z-10 flex flex-col items-center gap-4">
-        <div className="text-7xl animate-goal-ball">⚽</div>
-        <h1
-          className="text-7xl md:text-8xl font-black uppercase tracking-wider animate-goal-text bg-gradient-to-r from-yellow-300 via-yellow-500 to-orange-500 bg-clip-text text-transparent animate-shimmer"
-          style={{ animationDelay: '0.2s' }}
-        >
-          GOOOOL!
-        </h1>
-        <p className="text-2xl md:text-3xl font-bold text-white animate-goal-text" style={{ animationDelay: '0.5s' }}>
-          {teamName}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ==========================
-// MAIN COMPONENT
-// ==========================
 export default function ManageGames() {
   const [jogos, setJogos] = useState([]);
-  const [times, setTimes] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [gameData, setGameData] = useState({ fase: 'Fase de Grupos', time_a_id: '', time_b_id: '', data_hora: '', torneio_id: 1 });
-  const [goalCelebration, setGoalCelebration] = useState(null); // { teamName }
-  const [generating, setGenerating] = useState(false);
+  const [loading, setLoading] = useState(true);
+  // Annotation form
+  const [showAnnotation, setShowAnnotation] = useState(null); // jogo_id
+  const [annotForm, setAnnotForm] = useState({ tipo: 'cartao_amarelo', jogador: '', minuto: '', descricao: '', time_id: '' });
+  // Expanded annotations
+  const [expandedAnnots, setExpandedAnnots] = useState({});
 
   const fetchJogos = async () => {
     try {
@@ -82,310 +33,273 @@ export default function ManageGames() {
       setJogos(resp.data);
     } catch (e) {
       console.error(e);
-    }
-  };
-
-  const fetchTimes = async () => {
-    try {
-      const resp = await api.get('/admin/times');
-      setTimes(resp.data);
-    } catch (e) {
-      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchJogos();
-    fetchTimes();
+    const interval = setInterval(fetchJogos, 8000);
+    return () => clearInterval(interval);
   }, []);
 
-  const updatePlacar = async (jogoId, time, incremento) => {
+  const updatePlacar = async (jogoId, field, delta) => {
+    const jogo = jogos.find(j => j.id === jogoId);
+    if (!jogo) return;
+    const newVal = Math.max(0, (jogo[field] || 0) + delta);
     try {
-      const jogo = jogos.find(j => j.id === jogoId);
-      const novoPlacarA = time === 'a' ? Math.max(0, jogo.placar_a + incremento) : jogo.placar_a;
-      const novoPlacarB = time === 'b' ? Math.max(0, jogo.placar_b + incremento) : jogo.placar_b;
-
-      await api.put(`/admin/jogos/${jogoId}/placar`, {
-        placar_a: novoPlacarA,
-        placar_b: novoPlacarB
-      });
-
-      // Trigger goal celebration on increment
-      if (incremento > 0) {
-        const teamName = time === 'a' ? jogo.time_a_nome : jogo.time_b_nome;
-        setGoalCelebration({ teamName });
-      }
-
+      await api.put(`/admin/jogos/${jogoId}/placar`, { [field]: newVal });
       fetchJogos();
-    } catch (e) {
-      alert('Erro ao atualizar placar');
-    }
+    } catch (e) { console.error(e); }
   };
 
-  const updateStatus = async (jogoId, novoStatus) => {
+  const updateStatus = async (jogoId, status) => {
     try {
-      await api.put(`/admin/jogos/${jogoId}/placar`, { status: novoStatus });
+      await api.put(`/admin/jogos/${jogoId}/placar`, { status });
       fetchJogos();
-    } catch (e) {
-      alert('Erro ao mudar status');
-    }
+    } catch (e) { console.error(e); }
   };
 
   const generateBracket = async () => {
-    if (!window.confirm('Gerar chaveamento automático? Isso criará os jogos do torneio baseado nos times cadastrados.')) return;
-    setGenerating(true);
+    if (!confirm('Isso irá recriar o chaveamento. Todos os jogos atuais serão apagados. Continuar?')) return;
     try {
       const resp = await api.post('/admin/bracket/generate', { torneio_id: 1 });
-      alert(resp.data.message || 'Chaveamento gerado com sucesso!');
+      alert(resp.data.message);
       fetchJogos();
     } catch (e) {
       alert(e.response?.data?.error || 'Erro ao gerar chaveamento');
-    } finally {
-      setGenerating(false);
     }
   };
 
   const advancePhase = async () => {
-    if (!window.confirm('Avançar fase? Os vencedores serão promovidos para a próxima rodada.')) return;
     try {
       const resp = await api.post('/admin/bracket/advance', { torneio_id: 1 });
-      alert(resp.data.message || 'Fase avançada!');
+      alert(resp.data.message);
       fetchJogos();
     } catch (e) {
       alert(e.response?.data?.error || 'Erro ao avançar fase');
     }
   };
 
-  // Group games by phase for display
-  const phaseOrder = ['Fase de Grupos', 'Oitavas de Final', 'Quartas de Final', 'Semifinal', 'Final'];
-  const jogosPorFase = {};
+  // Annotations
+  const submitAnnotation = async (jogoId) => {
+    try {
+      await api.post(`/admin/jogos/${jogoId}/anotacoes`, annotForm);
+      setShowAnnotation(null);
+      setAnnotForm({ tipo: 'cartao_amarelo', jogador: '', minuto: '', descricao: '', time_id: '' });
+      fetchJogos();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Erro ao registrar anotação');
+    }
+  };
+
+  const deleteAnnotation = async (annotId) => {
+    if (!confirm('Remover esta anotação?')) return;
+    try {
+      await api.delete(`/admin/anotacoes/${annotId}`);
+      fetchJogos();
+    } catch (e) { console.error(e); }
+  };
+
+  const toggleAnnots = (jogoId) => {
+    setExpandedAnnots(prev => ({ ...prev, [jogoId]: !prev[jogoId] }));
+  };
+
+  // Group by fase
+  const fases = {};
   jogos.forEach(j => {
-    if (!jogosPorFase[j.fase]) jogosPorFase[j.fase] = [];
-    jogosPorFase[j.fase].push(j);
+    const f = j.fase || 'Sem Fase';
+    if (!fases[f]) fases[f] = [];
+    fases[f].push(j);
   });
 
-  return (
-    <div className="p-8 animate-fade-in relative">
-      {/* Goal Celebration Overlay */}
-      {goalCelebration && (
-        <GoalCelebration
-          teamName={goalCelebration.teamName}
-          onFinish={() => setGoalCelebration(null)}
-        />
-      )}
+  if (loading) {
+    return <div className="flex items-center justify-center h-64"><div className="animate-spin text-blue-500"><Trophy size={32} /></div></div>;
+  }
 
-      <div className="flex justify-between items-center mb-8">
+  return (
+    <div className="p-8 animate-fade-in">
+      <div className="flex justify-between items-center mb-8 border-b border-gray-200 pb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Gerenciar Jogos</h1>
-          <p className="text-gray-500 mt-2">Atualize placares e status em tempo real.</p>
+          <p className="text-gray-500 mt-1">Atualize placares, status e anotações em tempo real.</p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={generateBracket}
-            disabled={generating}
-            className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all shadow-lg shadow-purple-500/20 disabled:opacity-50"
-          >
-            <Zap size={20} /> {generating ? 'Gerando...' : 'Gerar Chaveamento'}
+          <button onClick={advancePhase} className="px-4 py-2.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition-colors flex items-center gap-2 text-sm">
+            <Zap size={16} /> Avançar Fase
           </button>
-          {jogos.some(j => j.status === 'finalizado') && (
-            <button
-              onClick={advancePhase}
-              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all shadow-lg shadow-green-500/20"
-            >
-              <ChevronRight size={20} /> Avançar Fase
-            </button>
-          )}
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-lg shadow-blue-500/20"
-          >
-            <Plus size={20} /> Novo Jogo
+          <button onClick={generateBracket} className="px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center gap-2 text-sm">
+            <Zap size={16} /> Gerar Chaveamento
           </button>
         </div>
       </div>
 
-      {/* Games grouped by phase */}
-      {phaseOrder.map(fase => {
-        const fasJogos = jogosPorFase[fase];
-        if (!fasJogos || fasJogos.length === 0) return null;
-        return (
-          <div key={fase} className="mb-10">
-            <div className="flex items-center gap-3 mb-4">
-              <Trophy size={20} className="text-blue-600" />
-              <h2 className="text-xl font-bold text-gray-800">{fase}</h2>
-              <span className="text-sm text-gray-400">({fasJogos.length} jogos)</span>
-            </div>
-            <div className="grid grid-cols-1 gap-6">
-              {fasJogos.map(jogo => (
-                <div key={jogo.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <span className="text-sm font-semibold text-gray-500 uppercase">{jogo.fase}</span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${STATUS_COLORS[jogo.status]}`}>
-                      {jogo.status}
-                    </span>
-                  </div>
+      {Object.entries(fases).map(([fase, jogosDoFase]) => (
+        <div key={fase} className="mb-10 animate-fade-in">
+          <div className="flex items-center gap-3 mb-4">
+            <Trophy size={20} className="text-blue-500" />
+            <h2 className="text-xl font-bold text-gray-800">{fase}</h2>
+            <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full font-medium">{jogosDoFase.length} jogos</span>
+          </div>
 
-                  <div className="flex justify-between items-center gap-8 mb-8">
-                    {/* Time A */}
-                    <div className="flex-1 flex flex-col items-center">
+          <div className="space-y-5">
+            {jogosDoFase.map(jogo => (
+              <div key={jogo.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 hover:shadow-md transition-shadow">
+                {/* Header */}
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-xs font-semibold uppercase text-gray-400 tracking-wider">{jogo.fase}</span>
+                  <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full border ${
+                    jogo.status === 'andamento' ? 'bg-green-50 text-green-600 border-green-200' :
+                    jogo.status === 'intervalo' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' :
+                    jogo.status === 'finalizado' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                    'bg-gray-50 text-gray-500 border-gray-200'
+                  }`}>
+                    {jogo.status === 'andamento' ? '🟢 AO VIVO' :
+                     jogo.status === 'intervalo' ? '⏸ INTERVALO' :
+                     jogo.status === 'finalizado' ? '✅ ENCERRADO' : '🕐 AGENDADO'}
+                  </span>
+                </div>
+
+                {/* Placar */}
+                <div className="flex justify-between items-center gap-4 mb-4">
+                  <div className="flex-1 text-center">
+                    <div className="flex items-center justify-center gap-2 mb-2">
                       {jogo.time_a_escudo ? (
-                        <img src={jogo.time_a_escudo} alt={jogo.time_a_nome} className="w-14 h-14 rounded-full object-cover mb-2 border-2 border-gray-100" />
+                        <img src={jogo.time_a_escudo} className="w-10 h-10 rounded-full object-cover" alt="" />
                       ) : null}
-                      <span className="text-xl font-bold mb-4">{jogo.time_a_nome || 'A definir'}</span>
-                      <div className="flex items-center gap-3">
-                        <button onClick={() => updatePlacar(jogo.id, 'a', -1)} className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xl hover:bg-gray-200 transition-colors">-</button>
-                        <span className="text-5xl font-black w-16 text-center">{jogo.placar_a}</span>
-                        <button onClick={() => updatePlacar(jogo.id, 'a', 1)} className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl hover:bg-blue-200 transition-colors"><Plus size={20}/></button>
-                      </div>
+                      <p className="font-bold text-gray-900">{jogo.time_a_nome}</p>
                     </div>
-
-                    <div className="text-gray-400 font-bold text-2xl">X</div>
-
-                    {/* Time B */}
-                    <div className="flex-1 flex flex-col items-center">
-                      {jogo.time_b_escudo ? (
-                        <img src={jogo.time_b_escudo} alt={jogo.time_b_nome} className="w-14 h-14 rounded-full object-cover mb-2 border-2 border-gray-100" />
-                      ) : null}
-                      <span className="text-xl font-bold mb-4">{jogo.time_b_nome || 'A definir'}</span>
-                      <div className="flex items-center gap-3">
-                        <button onClick={() => updatePlacar(jogo.id, 'b', -1)} className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xl hover:bg-gray-200 transition-colors">-</button>
-                        <span className="text-5xl font-black w-16 text-center">{jogo.placar_b}</span>
-                        <button onClick={() => updatePlacar(jogo.id, 'b', 1)} className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl hover:bg-blue-200 transition-colors"><Plus size={20}/></button>
-                      </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <button onClick={() => updatePlacar(jogo.id, 'placar_a', -1)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors"><Minus size={14} /></button>
+                      <span className="text-4xl font-black text-gray-900 w-14 text-center">{jogo.placar_a}</span>
+                      <button onClick={() => updatePlacar(jogo.id, 'placar_a', 1)} className="w-8 h-8 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center text-blue-600 transition-colors"><Plus size={14} /></button>
                     </div>
                   </div>
-
-                  {/* Status Controls */}
-                  <div className="flex flex-wrap gap-3 pt-6 border-t border-gray-100 justify-center">
-                    <button
-                      onClick={() => updateStatus(jogo.id, 'andamento')}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${jogo.status === 'andamento' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}
-                    >
-                      <Play size={18} /> Iniciar / Retomar
-                    </button>
-                    <button
-                      onClick={() => updateStatus(jogo.id, 'intervalo')}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${jogo.status === 'intervalo' ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}
-                    >
-                      <Pause size={18} /> Intervalo
-                    </button>
-                    <button
-                      onClick={() => updateStatus(jogo.id, 'finalizado')}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${jogo.status === 'finalizado' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                    >
-                      <Square size={18} /> Encerrar Jogo
-                    </button>
+                  <span className="text-gray-300 text-2xl font-light">×</span>
+                  <div className="flex-1 text-center">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <p className="font-bold text-gray-900">{jogo.time_b_nome}</p>
+                      {jogo.time_b_escudo ? (
+                        <img src={jogo.time_b_escudo} className="w-10 h-10 rounded-full object-cover" alt="" />
+                      ) : null}
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <button onClick={() => updatePlacar(jogo.id, 'placar_b', -1)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors"><Minus size={14} /></button>
+                      <span className="text-4xl font-black text-gray-900 w-14 text-center">{jogo.placar_b}</span>
+                      <button onClick={() => updatePlacar(jogo.id, 'placar_b', 1)} className="w-8 h-8 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center text-blue-600 transition-colors"><Plus size={14} /></button>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
 
-      {/* Also show any games not in the predefined phases */}
-      {jogos.filter(j => !phaseOrder.includes(j.fase)).length > 0 && (
-        <div className="mb-10">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Outros</h2>
-          <div className="grid grid-cols-1 gap-6">
-            {jogos.filter(j => !phaseOrder.includes(j.fase)).map(jogo => (
-              <div key={jogo.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <span className="text-sm font-semibold text-gray-500">{jogo.fase} — {jogo.time_a_nome} vs {jogo.time_b_nome}</span>
+                {/* Status Controls */}
+                <div className="flex justify-center gap-3 mb-4">
+                  <button onClick={() => updateStatus(jogo.id, 'andamento')} className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${jogo.status === 'andamento' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}><Play size={14} /> Iniciar / Retomar</button>
+                  <button onClick={() => updateStatus(jogo.id, 'intervalo')} className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${jogo.status === 'intervalo' ? 'bg-yellow-600 text-white' : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}><Pause size={14} /> Intervalo</button>
+                  <button onClick={() => updateStatus(jogo.id, 'finalizado')} className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${jogo.status === 'finalizado' ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}`}><Square size={14} /> Encerrar Jogo</button>
+                </div>
+
+                {/* Annotations Section */}
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <button onClick={() => toggleAnnots(jogo.id)} className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                      <FileText size={14} />
+                      Anotações ({jogo.anotacoes?.length || 0})
+                      {expandedAnnots[jogo.id] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                    <button
+                      onClick={() => { setShowAnnotation(showAnnotation === jogo.id ? null : jogo.id); setAnnotForm({ ...annotForm, time_id: '' }); }}
+                      className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors font-medium flex items-center gap-1"
+                    >
+                      <Plus size={12} /> Nova Anotação
+                    </button>
+                  </div>
+
+                  {/* New Annotation Form */}
+                  {showAnnotation === jogo.id && (
+                    <div className="bg-gray-50 rounded-xl p-4 mb-3 border border-gray-200 animate-slide-down">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        <select
+                          value={annotForm.tipo}
+                          onChange={e => setAnnotForm({ ...annotForm, tipo: e.target.value })}
+                          className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        >
+                          {Object.entries(TIPO_LABELS).map(([key, label]) => (
+                            <option key={key} value={key}>{TIPO_ICONS[key]} {label}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={annotForm.time_id}
+                          onChange={e => setAnnotForm({ ...annotForm, time_id: e.target.value })}
+                          className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        >
+                          <option value="">Selecionar Time</option>
+                          {jogo.time_a_id && <option value={jogo.time_a_id}>{jogo.time_a_nome}</option>}
+                          {jogo.time_b_id && <option value={jogo.time_b_id}>{jogo.time_b_nome}</option>}
+                        </select>
+                        <input
+                          placeholder="Jogador"
+                          value={annotForm.jogador}
+                          onChange={e => setAnnotForm({ ...annotForm, jogador: e.target.value })}
+                          className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        />
+                        <input
+                          placeholder="Minuto (ex: 32')"
+                          value={annotForm.minuto}
+                          onChange={e => setAnnotForm({ ...annotForm, minuto: e.target.value })}
+                          className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div className="flex gap-3">
+                        <input
+                          placeholder="Descrição (opcional)"
+                          value={annotForm.descricao}
+                          onChange={e => setAnnotForm({ ...annotForm, descricao: e.target.value })}
+                          className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        />
+                        <button
+                          onClick={() => submitAnnotation(jogo.id)}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                        >
+                          Registrar
+                        </button>
+                        <button
+                          onClick={() => setShowAnnotation(null)}
+                          className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-300 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Annotations List */}
+                  {expandedAnnots[jogo.id] && jogo.anotacoes && jogo.anotacoes.length > 0 && (
+                    <div className="space-y-2 animate-slide-down">
+                      {jogo.anotacoes.map(a => (
+                        <div key={a.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2.5 text-sm border border-gray-100">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg">{TIPO_ICONS[a.tipo] || '📋'}</span>
+                            <span className="font-medium text-gray-800">{a.minuto && `${a.minuto} - `}{a.jogador || ''}</span>
+                            <span className="text-gray-500">{a.time_nome ? `(${a.time_nome})` : ''}</span>
+                            {a.descricao && <span className="text-gray-400 italic">· {a.descricao}</span>}
+                          </div>
+                          <button onClick={() => deleteAnnotation(a.id)} className="text-red-400 hover:text-red-600 transition-colors"><X size={14} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         </div>
-      )}
+      ))}
 
       {jogos.length === 0 && (
-        <div className="text-center p-12 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-          <Trophy size={48} className="mx-auto mb-4 text-gray-300" />
-          <p className="text-lg font-medium">Nenhum jogo cadastrado.</p>
-          <p className="text-sm mt-2">Cadastre os times e use o botão <strong>"Gerar Chaveamento"</strong> para criar o torneio automaticamente.</p>
-        </div>
-      )}
-
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl animate-fade-in">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Novo Jogo</h2>
-
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                const formattedDate = gameData.data_hora.replace('T', ' ');
-                await api.post('/admin/jogos', { ...gameData, data_hora: formattedDate });
-                setShowModal(false);
-                fetchJogos();
-              } catch (err) {
-                alert('Erro ao criar jogo');
-              }
-            }} className="space-y-4">
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fase do Torneio</label>
-                <select
-                  value={gameData.fase}
-                  onChange={e => setGameData({...gameData, fase: e.target.value})}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option>Fase de Grupos</option>
-                  <option>Oitavas de Final</option>
-                  <option>Quartas de Final</option>
-                  <option>Semifinal</option>
-                  <option>Final</option>
-                </select>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time A</label>
-                  <select
-                    value={gameData.time_a_id}
-                    onChange={e => setGameData({...gameData, time_a_id: e.target.value})}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                    required
-                  >
-                    <option value="">Selecione...</option>
-                    {times.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time B</label>
-                  <select
-                    value={gameData.time_b_id}
-                    onChange={e => setGameData({...gameData, time_b_id: e.target.value})}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                    required
-                  >
-                    <option value="">Selecione...</option>
-                    {times.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data e Hora</label>
-                <input
-                  type="datetime-local"
-                  value={gameData.data_hora}
-                  onChange={e => setGameData({...gameData, data_hora: e.target.value})}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors">
-                  Cancelar
-                </button>
-                <button type="submit" className="flex-1 py-3 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
-                  Salvar
-                </button>
-              </div>
-
-            </form>
-          </div>
+        <div className="text-center py-16 text-gray-400">
+          <Trophy size={48} className="mx-auto mb-4 opacity-30" />
+          <p>Nenhum jogo cadastrado. Gere o chaveamento para começar!</p>
         </div>
       )}
     </div>

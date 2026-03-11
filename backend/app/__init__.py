@@ -24,11 +24,13 @@ def create_app(test_config=None):
 
     with app.app_context():
         db.create_all()
-        # Auto-migrate: add rodada column if missing
+        # Auto-migrations for existing databases
         from sqlalchemy import inspect, text
         inspector = inspect(db.engine)
-        columns = [col['name'] for col in inspector.get_columns('jogos')]
-        if 'rodada' not in columns:
+        
+        # Migrate: add rodada to jogos
+        jogos_columns = [col['name'] for col in inspector.get_columns('jogos')]
+        if 'rodada' not in jogos_columns:
             with db.engine.connect() as conn:
                 conn.execute(text('ALTER TABLE jogos ADD COLUMN rodada INTEGER DEFAULT 1'))
                 conn.commit()
@@ -50,6 +52,6 @@ def create_app(test_config=None):
 
     @app.route('/api')
     def api_info():
-        return {'service': 'Torneio Praça José Augusto API', 'version': '1.0', 'status': 'online'}
+        return {'service': 'Torneio Praça José Augusto API', 'version': '2.0', 'status': 'online'}
 
     return app

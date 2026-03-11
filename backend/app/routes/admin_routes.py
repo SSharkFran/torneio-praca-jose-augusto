@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
-from ..models import db, Torneio, Time, Jogo
+from ..models import db, Torneio, Time, Jogo, Anotacao, torneio_times
 from ..utils.auth import token_required
 import random
 import math
@@ -20,7 +20,6 @@ def get_stats():
     total_jogos = Jogo.query.count()
     jogos_finalizados = Jogo.query.filter_by(status='finalizado').count()
     
-    # Próximo jogo agendado
     proximo_jogo = Jogo.query.filter_by(status='agendado').order_by(Jogo.data_hora.asc()).first()
     proximo_jogo_info = None
     if proximo_jogo:
@@ -32,6 +31,16 @@ def get_stats():
             "data_hora": proximo_jogo.data_hora.isoformat() if proximo_jogo.data_hora else None
         }
     
+    # Torneio ativo
+    torneio_ativo = Torneio.query.filter(Torneio.status.in_(['agendado', 'andamento'])).first()
+    torneio_info = None
+    if torneio_ativo:
+        torneio_info = {
+            "id": torneio_ativo.id,
+            "nome": torneio_ativo.nome,
+            "status": torneio_ativo.status
+        }
+    
     return jsonify({
         "total_arrecadado": float(total_arrecadado),
         "acessos_liberados": acessos_liberados,
@@ -39,19 +48,22 @@ def get_stats():
         "total_times": total_times,
         "total_jogos": total_jogos,
         "jogos_finalizados": jogos_finalizados,
-        "proximo_jogo": proximo_jogo_info
+        "proximo_jogo": proximo_jogo_info,
+        "torneio_ativo": torneio_info
     })
 
+# --- TORNEIO MANAGEMENT ---
 @bp.route('/torneios', methods=['GET'])
 @token_required
 def get_torneios():
-    torneios = Torneio.query.all()
+    torneios = Torneio.query.order_by(Torneio.data_inicio.desc()).all()
     return jsonify([{
         "id": t.id, 
         "nome": t.nome, 
         "local": t.local, 
         "data_inicio": t.data_inicio.isoformat(), 
-        "status": t.status
+        "status": t.status,
+        "times_participantes": [{"id": tm.id, "nome": tm.nome, "sigla": tm.sigla} for tm in t.times_participantes]
     } for t in torneios])
 
 @bp.route('/torneios', methods=['POST'])
@@ -66,11 +78,56 @@ def create_torneio():
             data_inicio=data_inicio,
             status=data.get('status', 'agendado')
         )
+        
+        # Add selected teams
+        time_ids = data.get('time_ids', [])
+        if time_ids:
+            times = Time.query.filter(Time.id.in_(time_ids)).all()
+            novo_torneio.times_participantes = times
+        
         db.session.add(novo_torneio)
         db.session.commit()
         return jsonify({"message": "Torneio criado com sucesso", "id": novo_torneio.id}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+@bp.route('/torneios/<int:torneio_id>/finalizar', methods=['POST'])
+@token_required
+def finalizar_torneio(torneio_id):
+    """Arquiva o torneio (guarda as informações para consulta futura)"""
+    torneio = Torneio.query.get_or_404(torneio_id)
+    torneio.status = 'arquivado'
+    db.session.commit()
+    return jsonify({"message": f"Torneio '{torneio.nome}' arquivado com sucesso!"})
+
+@bp.route('/torneios/<int:torneio_id>/resetar', methods=['POST'])
+@token_required
+def resetar_torneio(torneio_id):
+    """Zera os jogos do torneio para recomeçar"""
+    torneio = Torneio.query.get_or_404(torneio_id)
+    
+    # Delete all annotations first (cascade)
+    jogos = Jogo.query.filter_by(torneio_id=torneio_id).all()
+    for j in jogos:
+        Anotacao.query.filter_by(jogo_id=j.id).delete()
+    
+    # Delete all games
+    Jogo.query.filter_by(torneio_id=torneio_id).delete()
+    torneio.status = 'agendado'
+    db.session.commit()
+    return jsonify({"message": f"Torneio '{torneio.nome}' resetado! Todos os jogos foram removidos."})
+
+@bp.route('/torneios/<int:torneio_id>/times', methods=['PUT'])
+@token_required
+def update_torneio_times(torneio_id):
+    """Atualiza os times participantes de um torneio"""
+    data = request.json
+    torneio = Torneio.query.get_or_404(torneio_id)
+    time_ids = data.get('time_ids', [])
+    times = Time.query.filter(Time.id.in_(time_ids)).all()
+    torneio.times_participantes = times
+    db.session.commit()
+    return jsonify({"message": f"{len(times)} times selecionados para o torneio."})
 
 # --- TIMES ---
 @bp.route('/times', methods=['GET'])
@@ -128,55 +185,46 @@ def delete_time(time_id):
 @bp.route('/jogos', methods=['GET'])
 @token_required
 def get_all_jogos():
-    """Retorna todos os jogos de todos os torneios"""
     jogos = Jogo.query.order_by(Jogo.data_hora.desc()).all()
-    resultados = []
-    for j in jogos:
-        resultados.append({
-            "id": j.id,
-            "fase": j.fase,
-            "rodada": j.rodada,
-            "time_a": j.time_a.nome if j.time_a else None,
-            "time_b": j.time_b.nome if j.time_b else None,
-            "time_a_nome": j.time_a.nome if j.time_a else "A definir",
-            "time_b_nome": j.time_b.nome if j.time_b else "A definir",
-            "time_a_escudo": j.time_a.escudo if j.time_a else None,
-            "time_b_escudo": j.time_b.escudo if j.time_b else None,
-            "time_a_id": j.time_a_id,
-            "time_b_id": j.time_b_id,
-            "placar_a": j.placar_a,
-            "placar_b": j.placar_b,
-            "status": j.status,
-            "data_hora": j.data_hora.isoformat() if j.data_hora else None,
-            "vencedor_id": j.vencedor_id
-        })
-    return jsonify(resultados)
+    return jsonify([format_jogo(j) for j in jogos])
 
 @bp.route('/jogos/<int:torneio_id>', methods=['GET'])
 @token_required
 def get_jogos(torneio_id):
     jogos = Jogo.query.filter_by(torneio_id=torneio_id).all()
-    resultados = []
-    for j in jogos:
-        resultados.append({
-            "id": j.id,
-            "fase": j.fase,
-            "rodada": j.rodada,
-            "time_a": j.time_a.nome if j.time_a else None,
-            "time_b": j.time_b.nome if j.time_b else None,
-            "time_a_nome": j.time_a.nome if j.time_a else "A definir",
-            "time_b_nome": j.time_b.nome if j.time_b else "A definir",
-            "time_a_escudo": j.time_a.escudo if j.time_a else None,
-            "time_b_escudo": j.time_b.escudo if j.time_b else None,
-            "time_a_id": j.time_a_id,
-            "time_b_id": j.time_b_id,
-            "placar_a": j.placar_a,
-            "placar_b": j.placar_b,
-            "status": j.status,
-            "data_hora": j.data_hora.isoformat() if j.data_hora else None,
-            "vencedor_id": j.vencedor_id
-        })
-    return jsonify(resultados)
+    return jsonify([format_jogo(j) for j in jogos])
+
+def format_jogo(j):
+    return {
+        "id": j.id,
+        "fase": j.fase,
+        "rodada": j.rodada,
+        "time_a": j.time_a.nome if j.time_a else None,
+        "time_b": j.time_b.nome if j.time_b else None,
+        "time_a_nome": j.time_a.nome if j.time_a else "A definir",
+        "time_b_nome": j.time_b.nome if j.time_b else "A definir",
+        "time_a_escudo": j.time_a.escudo if j.time_a else None,
+        "time_b_escudo": j.time_b.escudo if j.time_b else None,
+        "time_a_sigla": j.time_a.sigla if j.time_a else "???",
+        "time_b_sigla": j.time_b.sigla if j.time_b else "???",
+        "time_a_id": j.time_a_id,
+        "time_b_id": j.time_b_id,
+        "placar_a": j.placar_a,
+        "placar_b": j.placar_b,
+        "status": j.status,
+        "data_hora": j.data_hora.isoformat() if j.data_hora else None,
+        "vencedor_id": j.vencedor_id,
+        "anotacoes": [{
+            "id": a.id,
+            "tipo": a.tipo,
+            "jogador": a.jogador,
+            "minuto": a.minuto,
+            "descricao": a.descricao,
+            "time_id": a.time_id,
+            "time_nome": a.time.nome if a.time else None,
+            "created_at": a.created_at.isoformat() if a.created_at else None
+        } for a in j.anotacoes]
+    }
 
 @bp.route('/jogos', methods=['POST'])
 @token_required
@@ -222,9 +270,51 @@ def update_placar(jogo_id):
     db.session.commit()
     return jsonify({"message": "Placar atualizado", "id": jogo.id})
 
+# --- ANOTAÇÕES (Cartões, Faltas, etc) ---
+@bp.route('/jogos/<int:jogo_id>/anotacoes', methods=['GET'])
+@token_required
+def get_anotacoes(jogo_id):
+    anotacoes = Anotacao.query.filter_by(jogo_id=jogo_id).order_by(Anotacao.created_at.asc()).all()
+    return jsonify([{
+        "id": a.id,
+        "tipo": a.tipo,
+        "jogador": a.jogador,
+        "minuto": a.minuto,
+        "descricao": a.descricao,
+        "time_id": a.time_id,
+        "time_nome": a.time.nome if a.time else None
+    } for a in anotacoes])
+
+@bp.route('/jogos/<int:jogo_id>/anotacoes', methods=['POST'])
+@token_required
+def create_anotacao(jogo_id):
+    data = request.json
+    jogo = Jogo.query.get_or_404(jogo_id)
+    try:
+        anotacao = Anotacao(
+            jogo_id=jogo_id,
+            tipo=data['tipo'],
+            time_id=data.get('time_id'),
+            jogador=data.get('jogador'),
+            minuto=data.get('minuto'),
+            descricao=data.get('descricao')
+        )
+        db.session.add(anotacao)
+        db.session.commit()
+        return jsonify({"message": "Anotação registrada", "id": anotacao.id}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@bp.route('/anotacoes/<int:anotacao_id>', methods=['DELETE'])
+@token_required
+def delete_anotacao(anotacao_id):
+    anotacao = Anotacao.query.get_or_404(anotacao_id)
+    db.session.delete(anotacao)
+    db.session.commit()
+    return jsonify({"message": "Anotação removida"})
+
 # --- BRACKET GENERATION ---
 def get_fase_name(num_times):
-    """Retorna o nome da fase baseado no número de times"""
     if num_times <= 2:
         return 'Final'
     elif num_times <= 4:
@@ -242,27 +332,29 @@ def generate_bracket():
     data = request.json
     torneio_id = data.get('torneio_id', 1)
     
-    # Get all teams
-    times = Time.query.all()
-    if len(times) < 2:
-        return jsonify({"error": "É preciso ter pelo menos 2 times cadastrados para gerar o chaveamento."}), 400
+    torneio = Torneio.query.get_or_404(torneio_id)
     
-    # Check if bracket already exists
-    existing_jogos = Jogo.query.filter_by(torneio_id=torneio_id).count()
-    if existing_jogos > 0:
-        # Delete existing games to regenerate
-        Jogo.query.filter_by(torneio_id=torneio_id).delete()
-        db.session.commit()
+    # Use selected teams if available, otherwise all teams
+    if torneio.times_participantes:
+        team_list = list(torneio.times_participantes)
+    else:
+        team_list = Time.query.all()
     
-    # Shuffle teams randomly
-    team_list = list(times)
+    if len(team_list) < 2:
+        return jsonify({"error": "É preciso ter pelo menos 2 times para gerar o chaveamento."}), 400
+    
+    # Clear existing games
+    jogos_existentes = Jogo.query.filter_by(torneio_id=torneio_id).all()
+    for j in jogos_existentes:
+        Anotacao.query.filter_by(jogo_id=j.id).delete()
+    Jogo.query.filter_by(torneio_id=torneio_id).delete()
+    db.session.commit()
+    
     random.shuffle(team_list)
     
-    # Pad to nearest power of 2 for clean bracket
     num_times = len(team_list)
     next_power = 2 ** math.ceil(math.log2(num_times)) if num_times > 1 else 2
     
-    # Create first round matchups
     fase_name = get_fase_name(next_power)
     now = datetime.now()
     jogos_criados = 0
@@ -281,7 +373,6 @@ def generate_bracket():
             rodada=1
         )
         
-        # If one team has a bye (no opponent), auto-advance them
         if time_a and not time_b:
             jogo.vencedor_id = time_a.id
             jogo.status = 'finalizado'
@@ -296,6 +387,7 @@ def generate_bracket():
         db.session.add(jogo)
         jogos_criados += 1
     
+    torneio.status = 'andamento'
     db.session.commit()
     
     return jsonify({
@@ -310,22 +402,18 @@ def advance_bracket():
     data = request.json
     torneio_id = data.get('torneio_id', 1)
     
-    # Get all games in the tournament
     jogos = Jogo.query.filter_by(torneio_id=torneio_id).order_by(Jogo.rodada.asc()).all()
     
     if not jogos:
         return jsonify({"error": "Nenhum jogo encontrado no torneio."}), 400
     
-    # Find the highest round
     max_rodada = max(j.rodada for j in jogos)
     current_round_jogos = [j for j in jogos if j.rodada == max_rodada]
     
-    # Check if all games in current round are finalized
     pending = [j for j in current_round_jogos if j.status != 'finalizado']
     if pending:
-        return jsonify({"error": f"Ainda há {len(pending)} jogo(s) não finalizado(s) na rodada atual. Finalize todos antes de avançar."}), 400
+        return jsonify({"error": f"Ainda há {len(pending)} jogo(s) não finalizado(s) na rodada atual."}), 400
     
-    # Collect winners
     winners = []
     for j in current_round_jogos:
         if j.vencedor_id:
@@ -335,12 +423,16 @@ def advance_bracket():
         elif j.placar_b > j.placar_a:
             winners.append(j.time_b_id)
         else:
-            return jsonify({"error": f"Jogo {j.id} terminou em empate. Defina o vencedor (ex: pênaltis) antes de avançar."}), 400
+            return jsonify({"error": f"Jogo {j.id} terminou em empate. Defina o vencedor antes de avançar."}), 400
     
     if len(winners) < 2:
+        # Tournament is over!
+        torneio = Torneio.query.get(torneio_id)
+        if torneio:
+            torneio.status = 'finalizado'
+            db.session.commit()
         return jsonify({"message": "🏆 Torneio finalizado! O campeão já foi definido."}), 200
     
-    # Create next round
     next_rodada = max_rodada + 1
     next_fase = get_fase_name(len(winners))
     now = datetime.now()

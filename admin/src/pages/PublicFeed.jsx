@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
-import { Calendar, Clock, Trophy, MapPin, Activity, Search, X, Filter } from 'lucide-react';
+import { Calendar, Clock, Trophy, MapPin, Activity, Search, X, Filter, GitBranch, Heart, AlertTriangle } from 'lucide-react';
 
 const STATUS_COLORS = {
   agendado: 'bg-gray-700 text-gray-300 border-gray-600',
@@ -16,8 +16,16 @@ const STATUS_TEXT = {
   finalizado: 'Encerrado',
 };
 
+const TIPO_ICONS = {
+  cartao_amarelo: '🟨',
+  cartao_vermelho: '🟥',
+  falta: '⚠️',
+  substituicao: '🔄',
+  observacao: '📝'
+};
+
 // ================================
-// GOAL CELEBRATION (Public Version)
+// GOAL CELEBRATION (Public)
 // ================================
 function GoalCelebrationPublic({ teamName, onFinish }) {
   useEffect(() => {
@@ -35,9 +43,8 @@ function GoalCelebrationPublic({ teamName, onFinish }) {
   }));
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center animate-goal-overlay pointer-events-none">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-
       {confettiPieces.map(p => (
         <div
           key={p.id}
@@ -52,7 +59,6 @@ function GoalCelebrationPublic({ teamName, onFinish }) {
           }}
         />
       ))}
-
       <div className="relative z-10 flex flex-col items-center gap-4">
         <div className="text-8xl animate-goal-ball">⚽</div>
         <h1 className="text-6xl md:text-8xl font-black uppercase tracking-wider animate-goal-text bg-gradient-to-r from-yellow-300 via-yellow-500 to-orange-500 bg-clip-text text-transparent">
@@ -100,7 +106,6 @@ export default function PublicFeed() {
   const [goalCelebration, setGoalCelebration] = useState(null);
   const prevJogosRef = useRef({});
 
-  // Filters
   const [showFilters, setShowFilters] = useState(false);
   const [dateFilter, setDateFilter] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
@@ -116,7 +121,7 @@ export default function PublicFeed() {
       const resp = await api.get(url);
       const newJogos = resp.data;
 
-      // Detect goals for celebration
+      // Detect goals
       const prevMap = prevJogosRef.current;
       for (const jogo of newJogos) {
         const prev = prevMap[jogo.id];
@@ -129,7 +134,6 @@ export default function PublicFeed() {
         }
       }
 
-      // Update previous scores map
       const newMap = {};
       newJogos.forEach(j => { newMap[j.id] = { placar_a: j.placar_a, placar_b: j.placar_b }; });
       prevJogosRef.current = newMap;
@@ -163,7 +167,6 @@ export default function PublicFeed() {
     );
   }
 
-  // Jogo em Andamento sempre primeiro
   const jogosOrdenados = [...jogos].sort((a, b) => {
     if (a.status === 'andamento') return -1;
     if (b.status === 'andamento') return 1;
@@ -174,7 +177,6 @@ export default function PublicFeed() {
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white p-4 font-sans animate-fade-in">
-      {/* Goal Celebration */}
       {goalCelebration && (
         <GoalCelebrationPublic
           teamName={goalCelebration.teamName}
@@ -189,17 +191,42 @@ export default function PublicFeed() {
          </div>
       </header>
 
-      {/* Banner de Download do App */}
-      <div className="mb-4 p-1 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 opacity-90 hover:opacity-100 transition-opacity animate-fade-in" style={{ animationDelay: '150ms' }}>
-        <a href="/baixar-app" className="bg-[#0f172a]/40 backdrop-blur-sm rounded-xl p-4 flex items-center justify-between text-white">
-          <div className="flex flex-col">
-            <span className="font-bold text-lg leading-tight">Baixe o App Oficial 📱</span>
-            <span className="text-blue-100 text-sm mt-1">Placares ao vivo, notificações e mais</span>
+      {/* Quick Actions */}
+      <div className="flex gap-3 mb-4 animate-fade-in" style={{ animationDelay: '120ms' }}>
+        <a href="/bracket" className="flex-1 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 border border-blue-500/30 rounded-xl p-3 flex items-center gap-3 hover:border-blue-400/50 transition-all">
+          <div className="p-2 bg-blue-500/20 rounded-lg">
+            <GitBranch size={20} className="text-blue-400" />
           </div>
-          <div className="bg-white/20 p-2 rounded-full">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          <div>
+            <span className="font-bold text-sm text-white">Ver Chaveamento</span>
+            <p className="text-blue-300/60 text-xs">Bracket completo</p>
           </div>
         </a>
+        <a href="/baixar-app" className="flex-1 bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-xl p-3 flex items-center gap-3 hover:border-purple-400/50 transition-all">
+          <div className="p-2 bg-purple-500/20 rounded-lg">
+            <span className="text-lg">📱</span>
+          </div>
+          <div>
+            <span className="font-bold text-sm text-white">Baixe o App</span>
+            <p className="text-purple-300/60 text-xs">Placares ao vivo</p>
+          </div>
+        </a>
+      </div>
+
+      {/* PIX Donation Banner */}
+      <div className="mb-4 bg-gradient-to-r from-emerald-900/30 to-teal-900/30 border border-emerald-500/20 rounded-xl p-4 animate-fade-in" style={{ animationDelay: '140ms' }}>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-500/20 rounded-full">
+            <Heart size={18} className="text-emerald-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-emerald-300">Apoie este projeto gratuito! 💚</p>
+            <p className="text-xs text-emerald-400/60 mt-0.5">Faça um Pix de qualquer valor para ajudar a manter o torneio vivo.</p>
+          </div>
+          <a href="/baixar-app" className="px-3 py-1.5 bg-emerald-600/30 text-emerald-300 rounded-lg text-xs font-bold hover:bg-emerald-600/50 transition-colors border border-emerald-500/30">
+            Doar via Pix
+          </a>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -214,9 +241,7 @@ export default function PublicFeed() {
         >
           <Filter size={16} />
           Filtrar Jogos
-          {hasActiveFilters && (
-            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
-          )}
+          {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>}
         </button>
 
         {showFilters && (
@@ -246,10 +271,7 @@ export default function PublicFeed() {
               </div>
             </div>
             {hasActiveFilters && (
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
-              >
+              <button onClick={clearFilters} className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors">
                 <X size={14} /> Limpar filtros
               </button>
             )}
@@ -261,13 +283,16 @@ export default function PublicFeed() {
       <div className="space-y-6">
         {jogosOrdenados.map((jogo, index) => {
           const { date, time } = formatDataHora(jogo.data_hora);
+          const annotations = jogo.anotacoes || [];
+          const hasCards = annotations.some(a => a.tipo === 'cartao_amarelo' || a.tipo === 'cartao_vermelho');
+
           return (
             <div
               key={jogo.id}
               className="bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50 shadow-xl backdrop-blur-sm animate-fade-in"
               style={{ animationDelay: `${250 + index * 100}ms` }}
             >
-               {/* Header do Card */}
+               {/* Header */}
                <div className="flex justify-between items-center mb-6">
                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{jogo.fase}</span>
                    <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full border ${STATUS_COLORS[jogo.status]} flex items-center gap-1`}>
@@ -276,9 +301,8 @@ export default function PublicFeed() {
                    </span>
                </div>
 
-               {/* Placar e Times */}
+               {/* Placar */}
                <div className="flex justify-between items-center gap-4">
-                  {/* Time A */}
                   <div className="flex-1 flex flex-col items-center">
                       <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center shadow-inner mb-3 overflow-hidden">
                           {jogo.time_a_escudo ? (
@@ -289,8 +313,6 @@ export default function PublicFeed() {
                       </div>
                       <span className="font-semibold text-center text-sm">{jogo.time_a_nome}</span>
                   </div>
-
-                  {/* Resultado Central */}
                   <div className="flex flex-col items-center justify-center px-2">
                       <div className="flex items-center gap-3 text-4xl font-black">
                           <span className={jogo.status === 'andamento' ? 'text-white' : 'text-slate-300'}>{jogo.placar_a}</span>
@@ -298,8 +320,6 @@ export default function PublicFeed() {
                           <span className={jogo.status === 'andamento' ? 'text-white' : 'text-slate-300'}>{jogo.placar_b}</span>
                       </div>
                   </div>
-
-                  {/* Time B */}
                   <div className="flex-1 flex flex-col items-center">
                       <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center shadow-inner mb-3 overflow-hidden">
                           {jogo.time_b_escudo ? (
@@ -312,10 +332,28 @@ export default function PublicFeed() {
                   </div>
                </div>
 
-               {/* Footer do Card */}
+               {/* Annotations (Cards, Fouls, etc) */}
+               {annotations.length > 0 && (
+                 <div className="mt-4 pt-4 border-t border-slate-700/30">
+                   <div className="space-y-1.5">
+                     {annotations.map(a => (
+                       <div key={a.id} className="flex items-center gap-2 text-xs text-slate-400">
+                         <span>{TIPO_ICONS[a.tipo] || '📋'}</span>
+                         <span className="font-medium text-slate-300">{a.minuto && `${a.minuto}`}</span>
+                         <span>{a.jogador}</span>
+                         <span className="text-slate-500">({a.time_nome})</span>
+                         {a.descricao && <span className="text-slate-500 italic">· {a.descricao}</span>}
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               )}
+
+               {/* Footer */}
                <div className="mt-6 pt-4 border-t border-slate-700/50 flex justify-center gap-4 text-xs text-slate-500 font-medium">
                    <div className="flex items-center gap-1.5"><Calendar size={14} /> {date}</div>
                    <div className="flex items-center gap-1.5"><Clock size={14} /> {time}</div>
+                   {hasCards && <div className="flex items-center gap-1.5"><AlertTriangle size={14} className="text-yellow-500" /> Cartões</div>}
                    <div className="flex items-center gap-1.5"><Trophy size={14} /> Oficial</div>
                </div>
             </div>
